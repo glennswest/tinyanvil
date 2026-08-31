@@ -126,6 +126,29 @@ fn golden(out: &Path, size_mib: u64, tars: &[&Path]) -> R<()> {
     run("stormblock golden", &mut c)
 }
 
+/// Known repo aliases resolve to their release RPM, which installs the .repo
+/// file and GPG keys into the image the proper way. EPEL is EL-only: its
+/// packages are *built from* Fedora, so a Fedora image never uses it.
+fn repo_release_url(alias: &str, rv: &str) -> R<String> {
+    match alias {
+        "rpmfusion-free" => Ok(format!(
+            "https://mirrors.rpmfusion.org/free/fedora/rpmfusion-free-release-{rv}.noarch.rpm"
+        )),
+        "rpmfusion-nonfree" => Ok(format!(
+            "https://mirrors.rpmfusion.org/nonfree/fedora/rpmfusion-nonfree-release-{rv}.noarch.rpm"
+        )),
+        e if e.starts_with("epel") => Err(
+            "EPEL is for RHEL/CentOS/Alma, not Fedora — Fedora already carries those packages \
+             (EPEL builds from Fedora sources). Try rpmfusion-free / rpmfusion-nonfree, or pass \
+             a release-RPM URL.".into(),
+        ),
+        u if u.starts_with("http://") || u.starts_with("https://") => Ok(u.to_string()),
+        other => Err(format!(
+            "unknown repo '{other}' — known: rpmfusion-free, rpmfusion-nonfree, or a release-RPM URL"
+        )),
+    }
+}
+
 fn fsize(p: &Path) -> R<u64> {
     Ok(fs::metadata(p).map_err(|e| format!("{}: {e}", p.display()))?.len())
 }
@@ -162,7 +185,7 @@ fn base(raw: &Path, name: &str) -> R<()> {
     Ok(())
 }
 
-fn build(base: &str, new: &str, size_mib: Option<u64>, pkgs: &[String]) -> R<()> {
+fn build(base: &str, new: &str, size_mib: Option<u64>, repos: &[String], pkgs: &[String]) -> R<()> {
     let s = store();
     let base_tar = s.join("bases").join(format!("{base}.tar"));
     let base_img = s.join("bases").join(format!("{base}.img"));
@@ -184,16 +207,34 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, pkgs: &[String]) -> R<()>
         let _ovl = Mnt::overlay(&w.join("lower"), &w.join("upper"), &w.join("ovlwork"), &merged)?;
 
         let rv = releasever();
-        run(
-            "dnf5 install",
-            Command::new("dnf5")
-                .args(["-y", "--use-host-config"])
-                .arg(format!("--releasever={rv}"))
-                .arg(format!("--installroot={}", merged.display()))
-                .args(["--setopt=install_weak_deps=0", "--setopt=tsflags=nodocs"])
-                .args(["--exclude=linux-firmware*", "install"])
-                .args(pkgs),
-        )?;
+        if !repos.is_empty() {
+            // release RPMs drop .repo + GPG keys into the image; bootstrapped
+            // with the host's repo config since the extras don't exist yet
+            let urls: Vec<String> =
+                repos.iter().map(|r| repo_release_url(r, &rv)).collect::<R<_>>()?;
+            run(
+                "dnf5 install repo releases",
+                Command::new("dnf5")
+                    .args(["-y", "--use-host-config"])
+                    .arg(format!("--releasever={rv}"))
+                    .arg(format!("--installroot={}", merged.display()))
+                    .args(["--setopt=install_weak_deps=0", "install"])
+                    .args(&urls),
+            )?;
+        }
+        // with extra repos, resolve against the image's own repo config so the
+        // just-installed .repo files (and the base's fedora repos) are used
+        let mut inst = Command::new("dnf5");
+        inst.arg("-y");
+        if repos.is_empty() {
+            inst.arg("--use-host-config");
+        }
+        inst.arg(format!("--releasever={rv}"))
+            .arg(format!("--installroot={}", merged.display()))
+            .args(["--setopt=install_weak_deps=0", "--setopt=tsflags=nodocs"])
+            .args(["--exclude=linux-firmware*", "install"])
+            .args(pkgs);
+        run("dnf5 install", &mut inst)?;
         run(
             "dnf5 clean",
             Command::new("dnf5")
@@ -226,8 +267,9 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, pkgs: &[String]) -> R<()>
         fs::write(
             &manifest,
             format!(
-                "# {new} — forged from base '{base}' + {} ({})\n# name\tversion-release\tarch\tlicense\n{}\n",
+                "# {new} — forged from base '{base}' + {}{} ({})\n# name\tversion-release\tarch\tlicense\n{}\n",
                 pkgs.join(" "),
+                if repos.is_empty() { String::new() } else { format!(" [repos: {}]", repos.join(",")) },
                 stamp.trim(),
                 lines.join("\n")
             ),
@@ -293,19 +335,29 @@ fn main() {
             let (base_name, new) = (&args[1], &args[2]);
             let mut rest = &args[3..];
             let mut size = None;
-            if rest.first().map(String::as_str) == Some("--size") && rest.len() >= 2 {
-                size = parse_size(&rest[1]);
-                if size.is_none() {
-                    eprintln!("bad --size '{}'", rest[1]);
-                    exit(2);
+            let mut repos: Vec<String> = Vec::new();
+            loop {
+                match rest.first().map(String::as_str) {
+                    Some("--size") if rest.len() >= 2 => {
+                        size = parse_size(&rest[1]);
+                        if size.is_none() {
+                            eprintln!("bad --size '{}'", rest[1]);
+                            exit(2);
+                        }
+                        rest = &rest[2..];
+                    }
+                    Some("--repo") if rest.len() >= 2 => {
+                        repos.push(rest[1].clone());
+                        rest = &rest[2..];
+                    }
+                    _ => break,
                 }
-                rest = &rest[2..];
             }
             if rest.is_empty() {
                 eprintln!("no packages given");
                 exit(2);
             }
-            build(base_name, new, size, rest)
+            build(base_name, new, size, &repos, rest)
         }
         Some("list") => list(),
         Some("--version") | Some("-V") => {
@@ -315,7 +367,7 @@ fn main() {
         _ => {
             eprintln!(
                 "usage: tinyanvil base <tinystorm.raw> <basename>\n\
-                 \x20      tinyanvil build <basename> <newname> [--size 2G] <pkg>...\n\
+                 \x20      tinyanvil build <basename> <newname> [--size 2G] [--repo rpmfusion-free]... <pkg>...\n\
                  \x20      tinyanvil list"
             );
             exit(2);
