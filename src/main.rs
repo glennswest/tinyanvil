@@ -149,6 +149,34 @@ fn repo_release_url(alias: &str, rv: &str) -> R<String> {
     }
 }
 
+/// dnf5 resolves `gpgkey=file:///...` against the HOST, not the installroot.
+/// Rewrite every such key in the image's .repo files to point inside it.
+fn gpgkey_overrides(merged: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    let Ok(rd) = fs::read_dir(merged.join("etc/yum.repos.d")) else {
+        return out;
+    };
+    for e in rd.flatten() {
+        let Ok(text) = fs::read_to_string(e.path()) else {
+            continue;
+        };
+        let mut section = String::new();
+        for line in text.lines() {
+            let l = line.trim();
+            if l.starts_with('[') && l.ends_with(']') {
+                section = l[1..l.len() - 1].to_string();
+            } else if let Some(v) = l.strip_prefix("gpgkey=") {
+                if v.contains("file:///") && !section.is_empty() {
+                    let rewritten =
+                        v.replace("file:///", &format!("file://{}/", merged.display()));
+                    out.push(format!("--setopt={section}.gpgkey={rewritten}"));
+                }
+            }
+        }
+    }
+    out
+}
+
 fn fsize(p: &Path) -> R<u64> {
     Ok(fs::metadata(p).map_err(|e| format!("{}: {e}", p.display()))?.len())
 }
@@ -228,6 +256,10 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, repos: &[String], pkgs: &
         inst.arg("-y");
         if repos.is_empty() {
             inst.arg("--use-host-config");
+        } else {
+            for o in gpgkey_overrides(&merged) {
+                inst.arg(o);
+            }
         }
         inst.arg(format!("--releasever={rv}"))
             .arg(format!("--installroot={}", merged.display()))
