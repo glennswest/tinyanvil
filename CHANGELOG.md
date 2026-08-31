@@ -1,8 +1,8 @@
 # Changelog
 
-## [Unreleased]
+## [v0.1.0] — 2026-08-31
 
-### 2026-08-31
+### Added
 - **feat:** Initial tinyforge — forge.sh with `base` (tinystorm raw -> base tar + sealed
   golden via stormblock), `build` (overlayfs + host-side dnf5 -> delta layer -> layered
   golden with license manifest and SHA256SUMS entry), `list`.
