@@ -176,7 +176,7 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, pkgs: &[String]) -> R<()>
     }
 
     let manifest = s.join("goldens").join(format!("{new}.manifest.txt"));
-    let mut npkgs = 0usize;
+    let npkgs;
     {
         let lo = LoopDev::attach(&base_img, false)?;
         let _lower = Mnt::ro(&lo.0, &w.join("lower"))?;
