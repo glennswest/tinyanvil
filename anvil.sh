@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# tinyforge — forge customized tinystorm goldens.
+# tinyanvil — hammer out customized tinystorm goldens.
 #
 # A golden is layers: the tinystorm base rootfs as one tar, the user's
 # packages as a delta tar produced through an overlayfs upper, laid down by
@@ -7,14 +7,14 @@
 # HOST against the mounted clone (--installroot), never inside the image —
 # the same container-style management tinystorm itself is built with.
 #
-#   forge.sh base  <tinystorm.raw> <basename>          extract+seal a base
-#   forge.sh build <basename> <newname> [--size 2G] pkg [pkg...]
-#   forge.sh list                                      show bases and goldens
+#   anvil.sh base  <tinystorm.raw> <basename>          extract+seal a base
+#   anvil.sh build <basename> <newname> [--size 2G] pkg [pkg...]
+#   anvil.sh list                                      show bases and goldens
 #
-# Runs as root on the build box. Store: /build/tinyforge.
+# Runs as root on the build box. Store: /build/tinyanvil.
 set -euo pipefail
 
-STORE=${TINYFORGE_STORE:-/build/tinyforge}
+STORE=${TINYANVIL_STORE:-/build/tinyanvil}
 SB=${STORMBLOCK:-/root/stormblock/target/x86_64-unknown-linux-musl/release/stormblock}
 RELEASEVER=${RELEASEVER:-43}
 
@@ -64,7 +64,7 @@ build)
   SIZE=""
   [ "${1:-}" = "--size" ] && { SIZE="$2"; shift 2; }
   [ $# -ge 1 ] || { echo "no packages given" >&2; exit 1; }
-  [ -f "$STORE/bases/$BASE.img" ] || { echo "unknown base '$BASE' (run: forge.sh base ...)" >&2; exit 1; }
+  [ -f "$STORE/bases/$BASE.img" ] || { echo "unknown base '$BASE' (run: anvil.sh base ...)" >&2; exit 1; }
 
   W="$STORE/work/build-$$"
   mkdir -p "$W"/{lower,upper,ovlwork,merged}

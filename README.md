@@ -1,16 +1,16 @@
-# tinyforge
+# tinyanvil
 
-Forge customized [tinystorm](https://github.com/glennswest/tinystorm) goldens:
+Hammer out customized [tinystorm](https://github.com/glennswest/tinystorm) goldens:
 take the 97 MB base image, add whatever packages a user wants, and seal the
 result as a new golden — without ever putting a package manager inside the
 image.
 
 ```bash
 # once: turn a tinystorm build into a base layer
-./forge.sh base /build/images/tinystorm/tinycloudinit-0.7.2.raw tinycloudinit-0.7.2
+./anvil.sh base /build/images/tinystorm/tinycloudinit-0.7.2.raw tinycloudinit-0.7.2
 
 # per request: base + packages -> new golden (+ license manifest + checksum)
-./forge.sh build tinycloudinit-0.7.2 web-node nginx htop
+./anvil.sh build tinycloudinit-0.7.2 web-node nginx htop
 ```
 
 ## How it works
@@ -53,7 +53,7 @@ construction, and bases are shared across every golden forged from them.
   practical Fedora-based cloud image (97 MB qcow2, reproducible from build.sh).
 - **[stormblock](https://github.com/glennswest/stormblock)** — pure Rust block
   storage engine; its golden writer and (coming) slab CoW clones are
-  tinyforge's storage layer.
+  tinyanvil's storage layer.
 - **[tinycloudinit](https://github.com/glennswest/tinycloudinit)** — the 682 KB
   provisioner inside the base images.
 - **[tztiny](https://github.com/glennswest/tztiny)** — 463 KB embedded IANA
