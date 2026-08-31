@@ -151,7 +151,7 @@ fn repo_release_url(alias: &str, rv: &str) -> R<String> {
 
 /// dnf5 resolves `gpgkey=file:///...` against the HOST, not the installroot.
 /// Rewrite every such key in the image's .repo files to point inside it.
-fn gpgkey_overrides(merged: &Path) -> Vec<String> {
+fn gpgkey_overrides(merged: &Path, rv: &str) -> Vec<String> {
     let mut out = Vec::new();
     let Ok(rd) = fs::read_dir(merged.join("etc/yum.repos.d")) else {
         return out;
@@ -167,8 +167,11 @@ fn gpgkey_overrides(merged: &Path) -> Vec<String> {
                 section = l[1..l.len() - 1].to_string();
             } else if let Some(v) = l.strip_prefix("gpgkey=") {
                 if v.contains("file:///") && !section.is_empty() {
-                    let rewritten =
-                        v.replace("file:///", &format!("file://{}/", merged.display()));
+                    // dnf does not expand repo vars inside --setopt values
+                    let rewritten = v
+                        .replace("file:///", &format!("file://{}/", merged.display()))
+                        .replace("$releasever", rv)
+                        .replace("$basearch", std::env::consts::ARCH);
                     out.push(format!("--setopt={section}.gpgkey={rewritten}"));
                 }
             }
@@ -257,7 +260,7 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, repos: &[String], pkgs: &
         if repos.is_empty() {
             inst.arg("--use-host-config");
         } else {
-            for o in gpgkey_overrides(&merged) {
+            for o in gpgkey_overrides(&merged, &rv) {
                 inst.arg(o);
             }
         }
