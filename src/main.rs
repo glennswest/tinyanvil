@@ -335,11 +335,12 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, repos: &[String], pkgs: &
             .arg(format!("sha256sum '{new}.img' '{new}.manifest.txt' >> SHA256SUMS"))
             .current_dir(s.join("goldens")),
     )?;
+    let delta_bytes = fsize(&delta).unwrap_or(0);
     let _ = fs::remove_dir_all(&w);
     println!(
         "golden '{new}': {} ({npkgs} packages, {} delta)",
         human(fsize(&img)?),
-        human(fsize(&delta).unwrap_or(0))
+        human(delta_bytes)
     );
     Ok(())
 }
