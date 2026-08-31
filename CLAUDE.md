@@ -6,7 +6,7 @@ overlayfs merge (container-style); the delta upper becomes the second layer.
 See README.md.
 
 ## Version
-- Current: 0.3.0 (locations: `Cargo.toml`, `VERSION`, `CHANGELOG.md` heading)
+- Current: 0.4.0 (locations: `Cargo.toml`, `VERSION`, `CHANGELOG.md` heading)
 
 ## Build / run
 - Rust binary (std-only): `CARGO_TARGET_DIR=/build/cargo/tinyanvil cargo build --release
@@ -24,7 +24,10 @@ See README.md.
       -> 248M golden, 124 packages, nginx+htop confirmed present via ro mount + rpm query
 - [ ] stormblock issue: `clone` verb (import golden into slab, CoW clone, attach) — then
       swap the overlayfs step for real slab CoW
-- [ ] REST service (Rust): POST /api/v1/forge, job queue, golden registry
+- [x] v0.4.0: --repo (release-RPM mechanism, rpmfusion aliases, EPEL refused with
+      explanation) + delta-layer locale/doc/man/info strip + delta size reporting
+- [ ] REST service `tinyanvil serve` (Rust): POST /api/v1/build, job queue, golden
+      registry — runs on StormCOS; GUI ships as a stormconsole plugin driving that API
 - [ ] Bootable qcow2 emit (pair forged rootfs with tinystorm ESP/bootloader recipe)
 - [ ] Whiteout handling for package removals in the delta layer
 

@@ -1,6 +1,6 @@
 [package]
 name = "tinyanvil"
-version = "0.3.0"
+version = "0.4.0"
 edition = "2021"
 description = "Hammer out customized tinystorm goldens: CoW base + host-side dnf delta, sealed by stormblock"
 license = "MIT"

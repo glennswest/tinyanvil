@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.4.0] — 2026-08-31
+
+### Added
+- **feat:** `--repo` — enable extra repos via their release RPM (aliases rpmfusion-free/
+  rpmfusion-nonfree, or any release-RPM URL); resolution then uses the image's own repo
+  config. EPEL is refused with an explanation (EL-only; built from Fedora).
+- **feat:** Delta-layer size discipline: strip usr/share/{locale,doc,man,info} additions
+  from the upper layer; report delta size per build.
+- **docs:** Roadmap: GUI ships as a stormconsole plugin on StormCOS driving `tinyanvil serve`.
+
 ## [v0.3.0] — 2026-08-31
 
 ### Changed

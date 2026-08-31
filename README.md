@@ -49,13 +49,38 @@ path, the ext4 is written directly:
 The write path never touches the base: customization is copy-on-write by
 construction, and bases are shared across every golden forged from them.
 
+## Extra repos
+
+`--repo` enables third-party repos the proper way — by installing their
+release RPM into the image (which carries the .repo file and GPG keys), then
+resolving against the image's own repo config:
+
+```bash
+tinyanvil build tinycloudinit-0.7.2 media-node --repo rpmfusion-free x264
+```
+
+Known aliases: `rpmfusion-free`, `rpmfusion-nonfree`; anything else is taken
+as a release-RPM URL. **EPEL is refused on purpose** — it exists for
+RHEL/CentOS/Alma and is *built from* Fedora, so a Fedora image never needs it.
+
+## Size discipline
+
+The 97 MB base was hard-won; forged deltas keep the same rules. Weak deps
+and docs are off, and the delta layer is stripped of `usr/share/locale`,
+`doc`, `man`, and `info` that new packages drag back in — only additions live
+in the upper layer, so this can never touch base content. `build` reports the
+delta size so regressions are visible per golden.
+
 ## Roadmap
 
 - **stormblock slab CoW**: replace the overlayfs step with a true slab CoW
   clone (`stormblock` grows a `clone` verb — goldens imported into a slab,
   cloned, mounted via ublk `attach`). Filed on stormblock.
-- **Service**: a small REST API (`POST /api/v1/forge {base, name, packages}`,
-  job status, golden registry) in Rust, mkube/microdns-style.
+- **Service + StormCOS console app**: `tinyanvil serve` — a small REST API
+  (`POST /api/v1/build {base, name, repos, packages}`, job status, golden
+  registry) running on StormCOS, with the GUI delivered as a
+  [stormconsole](https://github.com/glennswest/stormconsole) plugin: pick a
+  base, tick packages/repos, watch the build, download or register the golden.
 - **Bootable output**: optionally emit a ready-to-boot qcow2 by pairing the
   forged rootfs with tinystorm's ESP/bootloader recipe.
 - Overlayfs whiteout handling for package *removals* (deletions in the delta

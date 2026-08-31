@@ -277,8 +277,16 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, repos: &[String], pkgs: &
         .map_err(|e| e.to_string())?;
     } // overlay + lower unmount, loop detaches
 
+    // the base earned its size the hard way — don't let the delta undo it:
+    // strip the same locale/doc weight from what the new packages brought.
+    // (pure additions live in the upper dir, so deleting there is safe and
+    // can never whiteout base content)
+    let upper = w.join("upper");
+    for junk in ["usr/share/locale", "usr/share/doc", "usr/share/man", "usr/share/info"] {
+        let _ = fs::remove_dir_all(upper.join(junk));
+    }
     let delta = w.join("delta.tar");
-    tar_rootfs(&w.join("upper"), &delta)?;
+    tar_rootfs(&upper, &delta)?;
     let size = match size_mib {
         Some(m) => m,
         None => auto_size_mib(fsize(&base_tar)? + fsize(&delta)?),
@@ -293,7 +301,11 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, repos: &[String], pkgs: &
             .current_dir(s.join("goldens")),
     )?;
     let _ = fs::remove_dir_all(&w);
-    println!("golden '{new}': {} ({npkgs} packages)", human(fsize(&img)?));
+    println!(
+        "golden '{new}': {} ({npkgs} packages, {} delta)",
+        human(fsize(&img)?),
+        human(fsize(&delta).unwrap_or(0))
+    );
     Ok(())
 }
 
