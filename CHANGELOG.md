@@ -1,5 +1,14 @@
 # Changelog
 
+## [v0.4.1] — 2026-08-31
+
+### Added
+- **feat:** Goldens keep their provenance: `<name>.delta.tar` (the package layer) and
+  `<name>.meta` (base, repos, packages, built, delta size) beside the image, covered by
+  SHA256SUMS. Enables re-forge after base updates and a future nested/slab form.
+- **docs:** Promotion decision recorded — flat/self-contained is the default; `--nested`
+  and `tinyanvil promote` arrive with stormblock slab CoW (#87).
+
 ## [v0.4.0] — 2026-08-31
 
 ### Added

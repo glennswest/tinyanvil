@@ -328,14 +328,32 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, repos: &[String], pkgs: &
     };
     let img = s.join("goldens").join(format!("{new}.img"));
     golden(&img, size, &[&base_tar, &delta])?;
+    // keep the delta and its provenance beside the golden: cheap insurance —
+    // re-forge after a base update, or reconstruct a nested/slab form later,
+    // without rebuilding from repos
+    let delta_kept = s.join("goldens").join(format!("{new}.delta.tar"));
+    fs::rename(&delta, &delta_kept).map_err(|e| format!("keep delta: {e}"))?;
+    let delta_bytes = fsize(&delta_kept)?;
+    let stamp = sh("date", Command::new("date").args(["-u", "+%Y-%m-%dT%H:%M:%SZ"]))?;
+    fs::write(
+        s.join("goldens").join(format!("{new}.meta")),
+        format!(
+            "base={base}\nrepos={}\npackages={}\nbuilt={}\ndelta_bytes={delta_bytes}\n",
+            repos.join(","),
+            pkgs.join(","),
+            stamp.trim()
+        ),
+    )
+    .map_err(|e| e.to_string())?;
     run(
         "sha256sum",
         Command::new("sh")
             .arg("-c")
-            .arg(format!("sha256sum '{new}.img' '{new}.manifest.txt' >> SHA256SUMS"))
+            .arg(format!(
+                "sha256sum '{new}.img' '{new}.manifest.txt' '{new}.delta.tar' '{new}.meta' >> SHA256SUMS"
+            ))
             .current_dir(s.join("goldens")),
     )?;
-    let delta_bytes = fsize(&delta).unwrap_or(0);
     let _ = fs::remove_dir_all(&w);
     println!(
         "golden '{new}': {} ({npkgs} packages, {} delta)",

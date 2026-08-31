@@ -71,6 +71,22 @@ and docs are off, and the delta layer is stripped of `usr/share/locale`,
 in the upper layer, so this can never touch base content. `build` reports the
 delta size so regressions are visible per golden.
 
+## Provenance & promotion
+
+Every golden is **fully promoted** (flat): a self-contained image with no
+link to its base — it moves to any node alone, and losing the base breaks
+nothing. Beside it, `build` keeps the raw material of the layered form:
+
+- `<name>.delta.tar` — exactly what the packages added (the second layer)
+- `<name>.meta` — base, repos, packages, build time, delta size
+
+That buys instant re-forge after a base update and, once stormblock grows
+slab CoW cloning, the option of a **nested** form (base ref + delta, extents
+shared by the storage engine) with `tinyanvil promote` as the escape hatch to
+flatten a nested golden before moving or GC'ing its base. Flat stays the
+default: the base is only ~222 MB, so a chain can never save more than that
+per golden, while flat buys single-artifact mobility and zero blast radius.
+
 ## Roadmap
 
 - **stormblock slab CoW**: replace the overlayfs step with a true slab CoW

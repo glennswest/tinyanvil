@@ -26,6 +26,9 @@ See README.md.
       swap the overlayfs step for real slab CoW
 - [x] v0.4.0: --repo (release-RPM mechanism, rpmfusion aliases, EPEL refused with
       explanation) + delta-layer locale/doc/man/info strip + delta size reporting
+- [x] v0.4.1: keep <name>.delta.tar + <name>.meta (base/repos/packages/built/delta size)
+      beside each golden, all in SHA256SUMS. Decision: flat/promoted is the default form;
+      --nested + `promote` wait for stormblock slab CoW (#87).
 - [ ] REST service `tinyanvil serve` (Rust): POST /api/v1/build, job queue, golden
       registry — runs on StormCOS; GUI ships as a stormconsole plugin driving that API
 - [ ] Bootable qcow2 emit (pair forged rootfs with tinystorm ESP/bootloader recipe)
