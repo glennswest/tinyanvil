@@ -32,8 +32,11 @@ cleanup() {
 }
 trap cleanup EXIT
 
-tar_rootfs() { # <dir> <out.tar> — preserve everything a rootfs needs
-  tar --numeric-owner --xattrs --xattrs-include='*' --acls --selinux \
+tar_rootfs() { # <dir> <out.tar>
+  # security.capability is the one xattr that matters (newuidmap/newgidmap);
+  # selinux labels and acls are dead weight in a selinux=0 image and trip
+  # stormblock's golden verifier (9 mismatches with them, clean without)
+  tar --numeric-owner --xattrs --xattrs-include=security.capability \
       -C "$1" -cf "$2" .
 }
 
