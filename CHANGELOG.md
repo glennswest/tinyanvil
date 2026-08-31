@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.3.0] — 2026-08-31
+
+### Changed
+- **BREAKING:** `anvil.sh` replaced by the `tinyanvil` Rust binary (std-only, zero crate
+  deps, static musl): same base/build/list verbs, RAII mount+loop cleanup on every failure
+  path, streamed dnf/stormblock output. Version now lives in Cargo.toml + VERSION.
+
 ## [v0.2.0] — 2026-08-31
 
 ### Changed

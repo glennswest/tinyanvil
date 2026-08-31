@@ -3,3 +3,5 @@ work/
 .DS_Store
 .env
 .env.*
+target/
+Cargo.lock

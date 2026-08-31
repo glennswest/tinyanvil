@@ -7,10 +7,24 @@ image.
 
 ```bash
 # once: turn a tinystorm build into a base layer
-./anvil.sh base /build/images/tinystorm/tinycloudinit-0.7.2.raw tinycloudinit-0.7.2
+tinyanvil base /build/images/tinystorm/tinycloudinit-0.7.2.raw tinycloudinit-0.7.2
 
 # per request: base + packages -> new golden (+ license manifest + checksum)
-./anvil.sh build tinycloudinit-0.7.2 web-node nginx htop
+tinyanvil build tinycloudinit-0.7.2 web-node nginx htop
+```
+
+A single static Rust binary (std-only, zero crate dependencies) that
+orchestrates the host tools which must exist anyway — dnf5, stormblock, tar,
+mount/losetup, sqlite3, rpm — with RAII guards so no failure path leaks a
+mount or loop device.
+
+## Build
+
+On the build box (never the Mac):
+
+```bash
+export CARGO_TARGET_DIR=/build/cargo/tinyanvil
+cargo build --release --target x86_64-unknown-linux-musl
 ```
 
 ## How it works

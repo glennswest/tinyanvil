@@ -6,14 +6,17 @@ overlayfs merge (container-style); the delta upper becomes the second layer.
 See README.md.
 
 ## Version
-- Current: 0.2.0 (locations: `VERSION`, `CHANGELOG.md` heading)
+- Current: 0.3.0 (locations: `Cargo.toml`, `VERSION`, `CHANGELOG.md` heading)
 
 ## Build / run
+- Rust binary (std-only): `CARGO_TARGET_DIR=/build/cargo/tinyanvil cargo build --release
+  --target x86_64-unknown-linux-musl` on dev. Never build on the Mac.
 - Runs as root on `root@dev.g8.lo`; store is `/build/tinyanvil` (bases/, goldens/, work/).
 - stormblock binary: `/root/stormblock/target/x86_64-unknown-linux-musl/release/stormblock`.
 - Working tree on dev: `/root/tinyanvil`.
 
 ## Work plan
+- [x] v0.3.0: Rust rewrite of the v0.1 shell prototype (std-only, RAII mount/loop guards)
 - [x] v0.1.0: anvil.sh — `base` (raw -> base tar + sealed golden), `build`
       (overlayfs + host dnf5 -> delta tar -> layered golden + manifest + sha256), `list`
 - [x] Verified end-to-end on dev (2026-08-31): base from tinycloudinit-0.7.2.raw
