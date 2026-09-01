@@ -29,6 +29,9 @@ See README.md.
 - [x] v0.4.1: keep <name>.delta.tar + <name>.meta (base/repos/packages/built/delta size)
       beside each golden, all in SHA256SUMS. Decision: flat/promoted is the default form;
       --nested + `promote` wait for stormblock slab CoW (#87).
+- [x] v0.5.0: export-oci (golden -> 2-layer OCI archive from kept base+delta, std-only
+      JSON/digests via sha256sum+gzip) and base-oci (podman export of any rpm-family image
+      as a base). Additions-only recorded as a system invariant (min base + add).
 - [ ] REST service `tinyanvil serve` (Rust): POST /api/v1/build, job queue, golden
       registry — runs on StormCOS; GUI ships as a stormconsole plugin driving that API
 - [ ] Bootable qcow2 emit (pair forged rootfs with tinystorm ESP/bootloader recipe)

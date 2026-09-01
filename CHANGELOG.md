@@ -1,5 +1,15 @@
 # Changelog
 
+## [v0.5.0] — 2026-09-01
+
+### Added
+- **feat:** `export-oci <golden> [tag]` — emit the golden as a two-layer OCI archive built
+  from the kept base.tar + delta.tar (no rebuild); registries dedup the shared base layer.
+- **feat:** `base-oci <image-ref> <name>` — use any rpm-family container image as a
+  customization base (podman export -> sealed golden); warns when no rpmdb is present.
+- **docs:** Additions-only declared an invariant (min base + add, never delete) — OCI
+  whiteouts are permanently out of scope.
+
 ## [v0.4.1] — 2026-08-31
 
 ### Added

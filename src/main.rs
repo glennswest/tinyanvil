@@ -180,6 +180,28 @@ fn gpgkey_overrides(merged: &Path, rv: &str) -> Vec<String> {
     out
 }
 
+fn sha256_file(p: &Path) -> R<String> {
+    let o = sh("sha256sum", Command::new("sha256sum").arg(p))?;
+    Ok(o.split_whitespace().next().unwrap_or_default().to_string())
+}
+
+fn oci_arch() -> &'static str {
+    match std::env::consts::ARCH {
+        "x86_64" => "amd64",
+        "aarch64" => "arm64",
+        a => a,
+    }
+}
+
+fn meta_base(name: &str) -> R<String> {
+    let p = store().join("goldens").join(format!("{name}.meta"));
+    let t = fs::read_to_string(&p).map_err(|e| format!("no provenance for '{name}' ({e})"))?;
+    t.lines()
+        .find_map(|l| l.strip_prefix("base="))
+        .map(str::to_string)
+        .ok_or_else(|| format!("{}: missing base=", p.display()))
+}
+
 fn fsize(p: &Path) -> R<u64> {
     Ok(fs::metadata(p).map_err(|e| format!("{}: {e}", p.display()))?.len())
 }
@@ -363,6 +385,147 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, repos: &[String], pkgs: &
     Ok(())
 }
 
+/// The golden's kept layers ARE an OCI image: base.tar + delta.tar as two
+/// gzipped layer blobs. Registries dedup the base layer across every golden —
+/// the nested storage economy on battle-tested infrastructure, while golden
+/// files stay flat for node mobility. Additions-only is an invariant of the
+/// whole system (min base, add to it), so OCI whiteouts can never be needed.
+fn export_oci(name: &str, tag: &str) -> R<()> {
+    let s = store();
+    let base = meta_base(name)?;
+    let base_tar = s.join("bases").join(format!("{base}.tar"));
+    let delta_tar = s.join("goldens").join(format!("{name}.delta.tar"));
+    for p in [&base_tar, &delta_tar] {
+        if !p.exists() {
+            return Err(format!("missing layer {}", p.display()));
+        }
+    }
+    let w = s.join("work").join(format!("oci-{}", std::process::id()));
+    let blobs = w.join("blobs/sha256");
+    fs::create_dir_all(&blobs).map_err(|e| e.to_string())?;
+
+    let mut diff_ids = Vec::new();
+    let mut layers = Vec::new(); // (digest, size)
+    for (i, t) in [&base_tar, &delta_tar].into_iter().enumerate() {
+        diff_ids.push(sha256_file(t)?);
+        let gz = w.join(format!("l{i}.gz"));
+        run(
+            "gzip",
+            Command::new("sh")
+                .arg("-c")
+                .arg(format!("gzip -n -c '{}' > '{}'", t.display(), gz.display())),
+        )?;
+        let d = sha256_file(&gz)?;
+        let sz = fsize(&gz)?;
+        fs::rename(&gz, blobs.join(&d)).map_err(|e| e.to_string())?;
+        layers.push((d, sz));
+    }
+
+    let config = format!(
+        concat!(
+            "{{\"architecture\":\"{arch}\",\"os\":\"linux\",",
+            "\"config\":{{\"Env\":[\"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin\"],\"Cmd\":[\"/bin/bash\"]}},",
+            "\"rootfs\":{{\"type\":\"layers\",\"diff_ids\":[\"sha256:{d0}\",\"sha256:{d1}\"]}}}}"
+        ),
+        arch = oci_arch(),
+        d0 = diff_ids[0],
+        d1 = diff_ids[1]
+    );
+    let cfg_path = w.join("config.json");
+    fs::write(&cfg_path, &config).map_err(|e| e.to_string())?;
+    let cfg_digest = sha256_file(&cfg_path)?;
+    let cfg_size = config.len();
+    fs::rename(&cfg_path, blobs.join(&cfg_digest)).map_err(|e| e.to_string())?;
+
+    let manifest = format!(
+        concat!(
+            "{{\"schemaVersion\":2,\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",",
+            "\"config\":{{\"mediaType\":\"application/vnd.oci.image.config.v1+json\",\"digest\":\"sha256:{c}\",\"size\":{cs}}},",
+            "\"layers\":[",
+            "{{\"mediaType\":\"application/vnd.oci.image.layer.v1.tar+gzip\",\"digest\":\"sha256:{l0}\",\"size\":{s0}}},",
+            "{{\"mediaType\":\"application/vnd.oci.image.layer.v1.tar+gzip\",\"digest\":\"sha256:{l1}\",\"size\":{s1}}}]}}"
+        ),
+        c = cfg_digest, cs = cfg_size,
+        l0 = layers[0].0, s0 = layers[0].1,
+        l1 = layers[1].0, s1 = layers[1].1
+    );
+    let man_path = w.join("manifest.json");
+    fs::write(&man_path, &manifest).map_err(|e| e.to_string())?;
+    let man_digest = sha256_file(&man_path)?;
+    let man_size = manifest.len();
+    fs::rename(&man_path, blobs.join(&man_digest)).map_err(|e| e.to_string())?;
+
+    fs::write(w.join("oci-layout"), "{\"imageLayoutVersion\":\"1.0.0\"}")
+        .map_err(|e| e.to_string())?;
+    fs::write(
+        w.join("index.json"),
+        format!(
+            concat!(
+                "{{\"schemaVersion\":2,\"manifests\":[{{",
+                "\"mediaType\":\"application/vnd.oci.image.manifest.v1+json\",",
+                "\"digest\":\"sha256:{d}\",\"size\":{sz},",
+                "\"annotations\":{{\"org.opencontainers.image.ref.name\":\"{tag}\"}}}}]}}"
+            ),
+            d = man_digest, sz = man_size, tag = tag
+        ),
+    )
+    .map_err(|e| e.to_string())?;
+
+    let out = s.join("goldens").join(format!("{name}.oci.tar"));
+    run(
+        "tar oci",
+        Command::new("tar").arg("-C").arg(&w).arg("-cf").arg(&out).arg("."),
+    )?;
+    run(
+        "sha256sum",
+        Command::new("sh")
+            .arg("-c")
+            .arg(format!("sha256sum '{name}.oci.tar' >> SHA256SUMS"))
+            .current_dir(s.join("goldens")),
+    )?;
+    let _ = fs::remove_dir_all(&w);
+    println!(
+        "oci '{tag}': {} -> {} (podman load -i {})",
+        human(fsize(&out)?),
+        out.display(),
+        out.display()
+    );
+    Ok(())
+}
+
+/// Any rpm-family container image as a customization base: flatten it with
+/// podman export and seal it exactly like a tinystorm raw.
+fn base_oci(image: &str, name: &str) -> R<()> {
+    let s = store();
+    fs::create_dir_all(s.join("bases")).map_err(|e| e.to_string())?;
+    let cid = sh("podman create", Command::new("podman").args(["create", image]))?
+        .trim()
+        .to_string();
+    let tar = s.join("bases").join(format!("{name}.tar"));
+    let r = run(
+        "podman export",
+        Command::new("sh")
+            .arg("-c")
+            .arg(format!("podman export {cid} > '{}'", tar.display())),
+    );
+    let _ = Command::new("podman").args(["rm", &cid]).output();
+    r?;
+    let has = sh(
+        "tar scan",
+        Command::new("sh").arg("-c").arg(format!(
+            "tar -tf '{}' | grep -c -m1 'usr/lib/sysimage/rpm' || true",
+            tar.display()
+        )),
+    )?;
+    if has.trim() == "0" {
+        eprintln!("warning: {image} has no rpmdb — 'build' (dnf) needs an rpm-family base");
+    }
+    let img = s.join("bases").join(format!("{name}.img"));
+    golden(&img, auto_size_mib(fsize(&tar)?), &[&tar])?;
+    println!("base '{name}' (from {image}): {} tar, {} golden", human(fsize(&tar)?), human(fsize(&img)?));
+    Ok(())
+}
+
 fn list() -> R<()> {
     for (title, dir) in [("bases", "bases"), ("goldens", "goldens")] {
         println!("== {title}:");
@@ -397,6 +560,11 @@ fn main() {
     let args: Vec<String> = env::args().skip(1).collect();
     let r = match args.first().map(String::as_str) {
         Some("base") if args.len() == 3 => base(Path::new(&args[1]), &args[2]),
+        Some("base-oci") if args.len() == 3 => base_oci(&args[1], &args[2]),
+        Some("export-oci") if args.len() >= 2 => {
+            let tag = args.get(2).cloned().unwrap_or_else(|| format!("{}:latest", args[1]));
+            export_oci(&args[1], &tag)
+        }
         Some("build") if args.len() >= 4 => {
             let (base_name, new) = (&args[1], &args[2]);
             let mut rest = &args[3..];
@@ -433,6 +601,8 @@ fn main() {
         _ => {
             eprintln!(
                 "usage: tinyanvil base <tinystorm.raw> <basename>\n\
+                 \x20      tinyanvil base-oci <image-ref> <basename>\n\
+                 \x20      tinyanvil export-oci <goldenname> [tag]\n\
                  \x20      tinyanvil build <basename> <newname> [--size 2G] [--repo rpmfusion-free]... <pkg>...\n\
                  \x20      tinyanvil list"
             );

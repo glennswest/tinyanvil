@@ -87,6 +87,25 @@ flatten a nested golden before moving or GC'ing its base. Flat stays the
 default: the base is only ~222 MB, so a chain can never save more than that
 per golden, while flat buys single-artifact mobility and zero blast radius.
 
+## Container images, both directions
+
+The kept layers **are** an OCI image, so the bridge is native:
+
+```bash
+# customized golden -> 2-layer OCI archive (base layer dedups in any registry)
+tinyanvil export-oci web-node web-node:latest    # then: podman load -i .../web-node.oci.tar
+
+# any rpm-family container image as a customization base
+tinyanvil base-oci registry.fedoraproject.org/fedora-minimal:43 fedmin-43
+tinyanvil build fedmin-43 tools htop
+```
+
+`export-oci` wraps base.tar + delta.tar as gzipped OCI layers with proper
+digests — no rebuild. Pushing goldens that share a base to a registry stores
+and transfers that base layer once: the nested-storage economy on standard
+infrastructure, while the golden .img files stay flat for single-artifact
+node mobility.
+
 ## Roadmap
 
 - **stormblock slab CoW**: replace the overlayfs step with a true slab CoW
@@ -99,8 +118,9 @@ per golden, while flat buys single-artifact mobility and zero blast radius.
   base, tick packages/repos, watch the build, download or register the golden.
 - **Bootable output**: optionally emit a ready-to-boot qcow2 by pairing the
   forged rootfs with tinystorm's ESP/bootloader recipe.
-- Overlayfs whiteout handling for package *removals* (deletions in the delta
-  layer) — additions-only today.
+- ~~Whiteout handling for removals~~ — **additions-only is an invariant**, not
+  a gap: the model is a minimum base plus additive layers; nothing is ever
+  deleted from a base. This is also exactly the OCI layer model.
 
 ## Sister projects
 
