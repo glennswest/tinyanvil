@@ -205,6 +205,12 @@ fn meta_base(name: &str) -> R<String> {
 fn fsize(p: &Path) -> R<u64> {
     Ok(fs::metadata(p).map_err(|e| format!("{}: {e}", p.display()))?.len())
 }
+/// Bytes actually allocated — goldens are sparse, so this is the real cost
+/// (apparent size is just the provisioned filesystem size).
+fn fdisk(p: &Path) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+    fs::metadata(p).map(|m| m.blocks() * 512).unwrap_or(0)
+}
 fn auto_size_mib(bytes: u64) -> u64 {
     (bytes / (1 << 20)) * 13 / 10 + 64
 }
@@ -234,7 +240,12 @@ fn base(raw: &Path, name: &str) -> R<()> {
 
     let img = s.join("bases").join(format!("{name}.img"));
     golden(&img, auto_size_mib(fsize(&tar)?), &[&tar])?;
-    println!("base '{name}': {} tar, {} golden", human(fsize(&tar)?), human(fsize(&img)?));
+    println!(
+        "base '{name}': {} tar, {} golden ({} on disk)",
+        human(fsize(&tar)?),
+        human(fsize(&img)?),
+        human(fdisk(&img))
+    );
     Ok(())
 }
 
@@ -378,8 +389,9 @@ fn build(base: &str, new: &str, size_mib: Option<u64>, repos: &[String], pkgs: &
     )?;
     let _ = fs::remove_dir_all(&w);
     println!(
-        "golden '{new}': {} ({npkgs} packages, {} delta)",
+        "golden '{new}': {} provisioned, {} on disk ({npkgs} packages, {} delta)",
         human(fsize(&img)?),
+        human(fdisk(&img)),
         human(delta_bytes)
     );
     Ok(())
@@ -522,7 +534,12 @@ fn base_oci(image: &str, name: &str) -> R<()> {
     }
     let img = s.join("bases").join(format!("{name}.img"));
     golden(&img, auto_size_mib(fsize(&tar)?), &[&tar])?;
-    println!("base '{name}' (from {image}): {} tar, {} golden", human(fsize(&tar)?), human(fsize(&img)?));
+    println!(
+        "base '{name}' (from {image}): {} tar, {} golden ({} on disk)",
+        human(fsize(&tar)?),
+        human(fsize(&img)?),
+        human(fdisk(&img))
+    );
     Ok(())
 }
 
@@ -530,13 +547,22 @@ fn list() -> R<()> {
     for (title, dir) in [("bases", "bases"), ("goldens", "goldens")] {
         println!("== {title}:");
         if let Ok(rd) = fs::read_dir(store().join(dir)) {
-            let mut rows: Vec<(String, u64)> = rd
+            let mut rows: Vec<(String, u64, u64)> = rd
                 .flatten()
-                .filter_map(|e| Some((e.file_name().into_string().ok()?, e.metadata().ok()?.len())))
+                .filter_map(|e| {
+                    let name = e.file_name().into_string().ok()?;
+                    let sz = e.metadata().ok()?.len();
+                    let disk = fdisk(&e.path());
+                    Some((name, sz, disk))
+                })
                 .collect();
             rows.sort();
-            for (n, sz) in rows {
-                println!("  {:>8}  {n}", human(sz));
+            for (n, sz, disk) in rows {
+                if disk + (1 << 20) < sz {
+                    println!("  {:>8} ({} on disk)  {n}", human(sz), human(disk));
+                } else {
+                    println!("  {:>8}  {n}", human(sz));
+                }
             }
         }
     }

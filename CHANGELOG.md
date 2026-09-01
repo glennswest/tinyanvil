@@ -1,5 +1,12 @@
 # Changelog
 
+## [v0.5.1] — 2026-09-01
+
+### Fixed
+- **fix:** Sizes now report bytes actually allocated, not just apparent size — goldens are
+  sparse (stormblock writes only real blocks: fedmin-43 shows 231M provisioned but 142M on
+  disk), and the old output invited exactly that misreading.
+
 ## [v0.5.0] — 2026-09-01
 
 ### Added
